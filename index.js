@@ -861,9 +861,14 @@ app.post('/api/teams/create', authenticateToken, async (req, res) => {
     if (members && members.length > 0) {
       for (const member of members) {
         if (member.email === req.user.email) continue;
+        
+        // Lookup user by email to associate their account immediately for in-app notifications
+        const userRes = await db.query('SELECT id FROM users WHERE email = $1', [member.email]);
+        const memberUserId = userRes.rows.length > 0 ? userRes.rows[0].id : null;
+
         await db.query(
-          'INSERT INTO team_members (team_id, email, register_number, invite_status) VALUES ($1, $2, $3, $4)',
-          [team.id, member.email, member.register_number, 'pending']
+          'INSERT INTO team_members (team_id, user_id, email, register_number, invite_status) VALUES ($1, $2, $3, $4, $5)',
+          [team.id, memberUserId, member.email, member.register_number, 'pending']
         );
       }
     }
