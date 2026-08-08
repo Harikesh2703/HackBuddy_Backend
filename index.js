@@ -320,8 +320,8 @@ app.put('/api/hackathons/:id', isAdmin, async (req, res) => {
 // Hugging Face Warmup Route
 app.get('/api/warmup-model', isAdmin, async (req, res) => {
   try {
-    const token = process.env['Qwen_2.5_3b'] || process.env.HF_TOKEN;
-    if (!token) return res.status(500).json({ error: 'Qwen_2.5_3b token not configured' });
+    const token = process.env.Qwen_3b || process.env.HF_TOKEN;
+    if (!token) return res.status(500).json({ error: 'Qwen_3b token not configured' });
     const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -410,7 +410,7 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
         await page.close();
 
         // Attempt HF API call
-        const token = process.env['Qwen_2.5_3b'] || process.env.HF_TOKEN;
+        const token = process.env.Qwen_3b || process.env.HF_TOKEN;
         if (token && screenshotBase64) {
           const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
             method: 'POST',
