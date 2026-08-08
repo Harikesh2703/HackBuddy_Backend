@@ -58,26 +58,22 @@ const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 // Middleware: Role Verification & Auth
 // ==========================================
 const authenticateToken = (req, res, next) => {
-  // MASTER BYPASS: Completely disabled authentication for testing
-  req.user = { id: 1, email: 'harikeshs.cse2024@citchennai.net', role: 'admin' };
-  return next();
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.status(401).json({ error: 'Unauthorized: Missing Token' });
+  
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Forbidden: Invalid Token' });
+    req.user = user;
+    next();
+  });
 };
 
 const isAdmin = async (req, res, next) => {
-  authenticateToken(req, res, async () => {
-    try {
-      if (req.user.email === 'harikeshs.cse2024@citchennai.net') {
-        return next();
-      }
-      const user = await db.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
-      if (user.rowCount === 0 || user.rows[0].role !== 'admin') {
-        return res.status(403).json({ error: 'Forbidden: Admin privilege required' });
-      }
-      next();
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  // DASHBOARD TESTING BYPASS: Only bypass auth for admin-specific endpoints
+  req.user = { id: 1, email: 'harikeshs.cse2024@citchennai.net', role: 'admin' };
+  return next();
 };
 
 // ==========================================
