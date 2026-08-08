@@ -320,12 +320,13 @@ app.put('/api/hackathons/:id', isAdmin, async (req, res) => {
 // Hugging Face Warmup Route
 app.get('/api/warmup-model', isAdmin, async (req, res) => {
   try {
-    if (!process.env.HF_TOKEN) return res.status(500).json({ error: 'HF_TOKEN not configured' });
+    const token = process.env['Qwen_2.5_3b'] || process.env.HF_TOKEN;
+    if (!token) return res.status(500).json({ error: 'Qwen_2.5_3b token not configured' });
     const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.HF_TOKEN}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
         model: "Qwen/Qwen2.5-VL-3B-Instruct",
@@ -408,12 +409,14 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
         const screenshotBase64 = await page.screenshot({ encoding: 'base64' });
         await page.close();
 
-        if (process.env.HF_TOKEN && screenshotBase64) {
+        // Attempt HF API call
+        const token = process.env['Qwen_2.5_3b'] || process.env.HF_TOKEN;
+        if (token && screenshotBase64) {
           const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${process.env.HF_TOKEN}`,
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
               model: "Qwen/Qwen2.5-VL-3B-Instruct",
