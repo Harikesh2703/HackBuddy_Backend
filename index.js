@@ -329,7 +329,7 @@ app.get('/api/warmup-model', isAdmin, async (req, res) => {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        model: "Qwen/Qwen2.5-3B-Instruct",
+        model: "Qwen/Qwen2.5-7B-Instruct",
         messages: [{ role: "user", content: "ping" }],
         max_tokens: 1
       })
