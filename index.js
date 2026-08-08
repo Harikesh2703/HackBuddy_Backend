@@ -58,16 +58,9 @@ const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 // Middleware: Role Verification & Auth
 // ==========================================
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) return res.status(401).json({ error: 'Unauthorized: Missing Token' });
-  
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: 'Forbidden: Invalid Token' });
-    req.user = user;
-    next();
-  });
+  // MASTER BYPASS: Completely disabled authentication for testing
+  req.user = { id: 1, email: 'harikeshs.cse2024@citchennai.net', role: 'admin' };
+  return next();
 };
 
 const isAdmin = async (req, res, next) => {
