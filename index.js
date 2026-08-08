@@ -329,7 +329,7 @@ app.get('/api/warmup-model', isAdmin, async (req, res) => {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        model: "Qwen/Qwen2.5-72B-Instruct",
+        model: "Qwen/Qwen2.5-3B-Instruct",
         messages: [{ role: "user", content: "ping" }],
         max_tokens: 1
       })
@@ -420,7 +420,7 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-              model: "Qwen/Qwen2.5-72B-Instruct",
+              model: "Qwen/Qwen2.5-3B-Instruct",
               messages: [
                 {
                   role: "user",
