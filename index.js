@@ -256,7 +256,12 @@ app.get('/api/users', async (req, res) => {
 // ==========================================
 app.get('/api/hackathons', async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM hackathons WHERE registration_deadline IS NULL OR registration_deadline >= CURRENT_DATE ORDER BY registration_deadline ASC, id DESC');
+    const { all } = req.query;
+    let query = 'SELECT * FROM hackathons WHERE registration_deadline IS NULL OR registration_deadline >= CURRENT_DATE ORDER BY registration_deadline ASC, id DESC';
+    if (all === 'true') {
+      query = 'SELECT * FROM hackathons ORDER BY created_at DESC, id DESC';
+    }
+    const result = await db.query(query);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -283,6 +288,32 @@ app.delete('/api/hackathons/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     await db.query('DELETE FROM hackathons WHERE id = $1', [id]);
     res.json({ success: true, message: 'Hackathon deleted' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/hackathons/:id', isAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { title, description, source_url, registration_deadline, event_date, status, event_mode, sample_url } = req.body;
+    const result = await db.query(
+      `UPDATE hackathons SET 
+        title = COALESCE($1, title), 
+        description = COALESCE($2, description), 
+        source_url = COALESCE($3, source_url), 
+        registration_deadline = COALESCE($4, registration_deadline), 
+        event_date = COALESCE($5, event_date), 
+        status = COALESCE($6, status), 
+        event_mode = COALESCE($7, event_mode), 
+        sample_url = COALESCE($8, sample_url)
+       WHERE id = $9 RETURNING *`,
+      [title, description, source_url, registration_deadline || null, event_date || null, status, event_mode, sample_url, id]
+    );
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Hackathon not found' });
+    }
+    res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
