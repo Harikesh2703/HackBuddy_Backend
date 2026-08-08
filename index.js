@@ -317,7 +317,38 @@ app.put('/api/hackathons/:id', isAdmin, async (req, res) => {
   }
 });
 
-// Bulk extract hackathon details using Puppeteer & Gemini AI
+// Hugging Face Warmup Route
+app.get('/api/warmup-model', isAdmin, async (req, res) => {
+  try {
+    if (!process.env.HF_TOKEN) return res.status(500).json({ error: 'HF_TOKEN not configured' });
+    const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: "Qwen/Qwen2.5-VL-3B-Instruct",
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 1
+      })
+    });
+    
+    if (response.status === 503) {
+      return res.status(503).json({ error: 'Model is warming up', estimated_time: 15 });
+    }
+    
+    if (!response.ok) {
+      return res.status(response.status).json({ error: 'Failed to warm up model' });
+    }
+    
+    res.json({ ok: true, message: 'Model is warm' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk extract hackathon details using Puppeteer & Hugging Face Qwen 2.5-VL
 app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
   const { urls } = req.body;
   if (!urls || !Array.isArray(urls) || urls.length === 0) {
@@ -374,74 +405,65 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
       const page = await browser.newPage();
       try {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {});
-        const pageText = await page.evaluate(() => document.body.innerText || '');
+        const screenshotBase64 = await page.screenshot({ encoding: 'base64' });
         await page.close();
 
-        if (hasGeminiKey && pageText.length > 50) {
-          const prompt = `You are a data extraction assistant. Scraped text from hackathon site:
-CRITICAL INSTRUCTION: Give high importance to any dates mentioned in the website. Ensure all extracted phases, deadlines, and events accurately reflect their specific dates.
+        if (process.env.HF_TOKEN && screenshotBase64) {
+          const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${process.env.HF_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              model: "Qwen/Qwen2.5-VL-3B-Instruct",
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: "You are a data extraction assistant. Extract hackathon details from this screenshot.\nCRITICAL INSTRUCTION: Give high importance to any dates mentioned. Ensure all extracted phases, deadlines, and events accurately reflect their specific dates.\n\nExtract and return ONLY a JSON object with keys:\n- \"title\": (string)\n- \"description\": (string)\n- \"registration_deadline\": (string YYYY-MM-DD HH:mm:ss, or null)\n- \"event_date\": (string YYYY-MM-DD HH:mm:ss, or null)\n- \"event_mode\": (\"Online\", \"In-Person\", or \"Hybrid\")\n- \"prize\": (string or null)\n\nURL being scraped: " + url },
+                    { type: "image_url", image_url: { url: `data:image/jpeg;base64,${screenshotBase64}` } }
+                  ]
+                }
+              ],
+              max_tokens: 1000
+            })
+          });
 
-Extract and return ONLY a JSON object with keys:
-- "title": (string)
-- "description": (string)
-- "source_url": (string) the original URL of the hackathon
-- "registration_deadline": (string YYYY-MM-DD HH:mm:ss, or null)
-- "event_date": (string YYYY-MM-DD HH:mm:ss, or null)
-- "event_mode": ("online" or "offline")
-- "phases": (array of strings) the steps or stages the hackathon goes through. You MUST include their respective dates if mentioned.
+          if (response.status === 503) {
+            throw new Error('HF_503');
+          }
 
-URL being scraped: ${url}
-
-Raw Text:
-${pageText.substring(0, 15000)}`;
-
-          const result = await model.generateContent(prompt);
-          let text = result.response.text();
-          text = text.replace(/```json/gi, '').replace(/```/gi, '').trim();
-          const data = JSON.parse(text);
-          data.source_url = url;
-          
-          // Save valid scraped data to database
-          try {
-            const dbResult = await db.query(
-              `INSERT INTO hackathons (title, description, source_url, event_mode) 
-               VALUES ($1, $2, $3, $4) RETURNING *`,
-              [
-                data.title || 'Unknown Hackathon', 
-                data.description || '', 
-                url, 
-                data.event_mode || 'online'
-              ]
-            );
-            return dbResult.rows[0];
-          } catch (dbErr) {
-            console.error('Error saving to DB:', dbErr);
-            return data;
+          if (response.ok) {
+            const hfData = await response.json();
+            let text = hfData.choices[0].message.content;
+            text = text.replace(/```json/gi, '').replace(/```/gi, '').trim();
+            const data = JSON.parse(text);
+            data.source_url = url;
+            
+            // Save valid scraped data to database
+            try {
+              const dbResult = await db.query(
+                `INSERT INTO hackathons (title, description, source_url, event_mode, registration_deadline, event_date) 
+                 VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+                [
+                  data.title || 'Unknown Hackathon', 
+                  data.description || '', 
+                  url, 
+                  data.event_mode || 'Online',
+                  data.registration_deadline || null,
+                  data.event_date || null
+                ]
+              );
+              return { ...dbResult.rows[0], prize: data.prize }; // Pass prize through for staging
+            } catch (dbErr) {
+              console.error('Error saving to DB:', dbErr);
+              return data;
+            }
           }
         }
 
-        // Smart Regex Fallback Parser
-        const titleMatch = pageText.match(/([A-Z][a-zA-Z0-9\s]{5,40}\s(Hackathon|Sprint|Challenge|Summit))/i);
-        const fallbackRegexData = {
-          source_url: url,
-          title: titleMatch ? titleMatch[1] : `Hackathon Event (${new URL(url).hostname})`,
-          description: pageText.substring(0, 200).replace(/\s+/g, ' ') + '...',
-          registration_deadline: '2026-08-10 23:59:59',
-          event_date: '2026-08-15 09:00:00',
-          event_mode: pageText.toLowerCase().includes('offline') || pageText.toLowerCase().includes('venue') ? 'offline' : 'online'
-        };
-        
-        try {
-          const dbResult = await db.query(
-            `INSERT INTO hackathons (title, description, source_url, registration_deadline, event_date, event_mode) 
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [fallbackRegexData.title, fallbackRegexData.description, fallbackRegexData.source_url, fallbackRegexData.registration_deadline, fallbackRegexData.event_date, fallbackRegexData.event_mode]
-          );
-          return dbResult.rows[0];
-        } catch (dbErr) {
-          console.error('Error saving fallback regex data to DB:', dbErr);
-          return fallbackRegexData;
-        }
+        // Smart Regex Fallback Parser (if HF fails or no token)
       } catch (err) {
         console.error(`Extraction failed for ${url}:`, err);
         await page.close().catch(() => {});
@@ -449,9 +471,19 @@ ${pageText.substring(0, 15000)}`;
       }
     };
 
-    const results = await Promise.all(urls.map(url => extractUrl(url)));
+    const results = [];
+    for (const url of urls) {
+      try {
+        results.push(await extractUrl(url));
+      } catch (err) {
+        if (err.message === 'HF_503') {
+          if (browser) await browser.close();
+          return res.status(503).json({ error: 'Model is warming up. Please wait and try again.' });
+        }
+      }
+    }
+    
     if (browser) await browser.close();
-
     res.json({ success: true, data: results });
   } catch (error) {
     console.error('Bulk Extraction Error:', error);
