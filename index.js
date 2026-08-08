@@ -329,7 +329,7 @@ app.get('/api/warmup-model', isAdmin, async (req, res) => {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        model: "Qwen/Qwen2.5-VL-3B-Instruct",
+        model: "Qwen/Qwen2.5-72B-Instruct",
         messages: [{ role: "user", content: "ping" }],
         max_tokens: 1
       })
@@ -406,12 +406,13 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
       const page = await browser.newPage();
       try {
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {});
-        const screenshotBase64 = await page.screenshot({ encoding: 'base64' });
+        const pageText = await page.evaluate(() => document.body.innerText).catch(() => 'No text found');
+        const truncatedText = pageText.substring(0, 15000);
         await page.close();
 
         // Attempt HF API call
         const token = process.env.Qwen_3b || process.env.HF_TOKEN;
-        if (token && screenshotBase64) {
+        if (token && truncatedText.length > 50) {
           const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -419,14 +420,11 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-              model: "Qwen/Qwen2.5-VL-3B-Instruct",
+              model: "Qwen/Qwen2.5-72B-Instruct",
               messages: [
                 {
                   role: "user",
-                  content: [
-                    { type: "text", text: "You are a data extraction assistant. Extract hackathon details from this screenshot.\nCRITICAL INSTRUCTION: Give high importance to any dates mentioned. Ensure all extracted phases, deadlines, and events accurately reflect their specific dates.\n\nExtract and return ONLY a JSON object with keys:\n- \"title\": (string)\n- \"description\": (string)\n- \"registration_deadline\": (string YYYY-MM-DD HH:mm:ss, or null)\n- \"event_date\": (string YYYY-MM-DD HH:mm:ss, or null)\n- \"event_mode\": (\"Online\", \"In-Person\", or \"Hybrid\")\n- \"prize\": (string or null)\n\nURL being scraped: " + url },
-                    { type: "image_url", image_url: { url: `data:image/jpeg;base64,${screenshotBase64}` } }
-                  ]
+                  content: "You are a data extraction assistant. Extract hackathon details from this website text.\nCRITICAL INSTRUCTION: Give high importance to any dates mentioned. Ensure all extracted phases, deadlines, and events accurately reflect their specific dates.\n\nExtract and return ONLY a JSON object with keys:\n- \"title\": (string)\n- \"description\": (string)\n- \"registration_deadline\": (string YYYY-MM-DD HH:mm:ss, or null)\n- \"event_date\": (string YYYY-MM-DD HH:mm:ss, or null)\n- \"event_mode\": (\"Online\", \"In-Person\", or \"Hybrid\")\n- \"prize\": (string or null)\n\nURL being scraped: " + url + "\n\nWebsite Text:\n" + truncatedText
                 }
               ],
               max_tokens: 1000
