@@ -459,13 +459,12 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
         results.push(await extractUrl(url));
       } catch (err) {
         if (err.message === 'HF_503') {
-          if (browser) await browser.close();
           return res.status(503).json({ error: 'Model is warming up. Please wait and try again.' });
         }
+        throw err; // Bubble up other errors (like Hugging Face errors)
       }
     }
     
-    if (browser) await browser.close();
     res.json({ success: true, data: results });
   } catch (error) {
     console.error('Bulk Extraction Error:', error);
