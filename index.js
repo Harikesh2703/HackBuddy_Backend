@@ -329,7 +329,7 @@ app.get('/api/warmup-model', isAdmin, async (req, res) => {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        model: "Qwen/Qwen2.5-3B-Instruct",
+        model: "Qwen/Qwen2.5-7B-Instruct",
         messages: [{ role: "user", content: "ping" }],
         max_tokens: 1
       })
@@ -340,7 +340,8 @@ app.get('/api/warmup-model', isAdmin, async (req, res) => {
     }
     
     if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to warm up model' });
+      const errText = await response.text();
+      return res.status(response.status).json({ error: `HF says: ${errText}` });
     }
     
     res.json({ ok: true, message: 'Model is warm' });
@@ -420,7 +421,7 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-              model: "Qwen/Qwen2.5-3B-Instruct",
+              model: "Qwen/Qwen2.5-7B-Instruct",
               messages: [
                 {
                   role: "user",
