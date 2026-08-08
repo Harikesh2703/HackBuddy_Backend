@@ -358,16 +358,6 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
   }
 
   try {
-    let browser;
-    try {
-      browser = await puppeteer.launch({ 
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        headless: true
-      });
-    } catch (e) {
-      console.warn('Puppeteer headless mode warning:', e.message);
-    }
-
     const extractUrl = async (url) => {
       // 1. Check if URL already exists in database
       try {
@@ -380,16 +370,22 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
         console.error(`Error checking DB for ${url}:`, err);
       }
 
-      if (!browser) {
-        throw new Error('Puppeteer browser failed to launch');
-      }
-
-      const page = await browser.newPage();
+      // Use Jina AI's free reader API to extract fully rendered Markdown text
+      // This completely bypasses the need for Puppeteer/Chrome!
+      let pageText = '';
       try {
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 }).catch(() => {});
-        const pageText = await page.evaluate(() => document.body.innerText).catch(() => 'No text found');
-        const truncatedText = pageText.substring(0, 15000);
-        await page.close();
+        const jinaResponse = await fetch('https://r.jina.ai/' + url);
+        if (jinaResponse.ok) {
+          pageText = await jinaResponse.text();
+        } else {
+          throw new Error('Jina returned ' + jinaResponse.status);
+        }
+      } catch (err) {
+        console.error('Jina fetch failed:', err);
+      }
+      
+      const truncatedText = pageText.substring(0, 15000);
+      try {
 
         // Attempt HF API call
         const token = process.env.Qwen_3b || process.env.HF_TOKEN;
@@ -453,7 +449,6 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
         // Smart Regex Fallback Parser (if HF fails or no token)
       } catch (err) {
         console.error(`Extraction failed for ${url}:`, err);
-        await page.close().catch(() => {});
         throw err;
       }
     };
