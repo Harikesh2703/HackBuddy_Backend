@@ -255,7 +255,7 @@ app.get('/api/users', async (req, res) => {
 app.get('/api/hackathons', async (req, res) => {
   try {
     const { all } = req.query;
-    let query = 'SELECT * FROM hackathons WHERE registration_deadline IS NULL OR registration_deadline >= CURRENT_DATE ORDER BY registration_deadline ASC, id DESC';
+    let query = "SELECT * FROM hackathons WHERE (registration_deadline IS NULL OR registration_deadline >= CURRENT_DATE) AND status NOT IN ('Draft', 'Archived') ORDER BY registration_deadline ASC, id DESC";
     if (all === 'true') {
       query = 'SELECT * FROM hackathons ORDER BY created_at DESC, id DESC';
     }
