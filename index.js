@@ -329,7 +329,7 @@ app.get('/api/warmup-model', isAdmin, async (req, res) => {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        model: "Qwen/Qwen2.5-7B-Instruct",
+        model: "Qwen/Qwen2.5-3B-Instruct",
         messages: [{ role: "user", content: "ping" }],
         max_tokens: 1
       })
@@ -381,27 +381,7 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
       }
 
       if (!browser) {
-        // Fallback mockup extraction if Puppeteer browser cannot be launched in environment
-        const domain = new URL(url).hostname;
-        const fallbackData = {
-          source_url: url,
-          title: `Extracted Hackathon from ${domain}`,
-          description: `Automatically extracted event parameters and challenge topics from ${url}.`,
-          registration_deadline: '2026-08-15 23:59:59',
-          event_date: '2026-08-20 09:00:00',
-          event_mode: 'online'
-        };
-        // Save fallback mockup data to database
-        try {
-          const dbResult = await db.query(
-            `INSERT INTO hackathons (title, description, source_url, registration_deadline, event_date, event_mode) 
-             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-            [fallbackData.title, fallbackData.description, fallbackData.source_url, fallbackData.registration_deadline, fallbackData.event_date, fallbackData.event_mode]
-          );
-          return dbResult.rows[0];
-        } catch (dbErr) {
-          return fallbackData;
-        }
+        throw new Error('Puppeteer browser failed to launch');
       }
 
       const page = await browser.newPage();
@@ -434,6 +414,11 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
 
           if (response.status === 503) {
             throw new Error('HF_503');
+          }
+
+          if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`HF Error: ${errText}`);
           }
 
           if (response.ok) {
@@ -469,7 +454,7 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
       } catch (err) {
         console.error(`Extraction failed for ${url}:`, err);
         await page.close().catch(() => {});
-        return { source_url: url, title: `Hackathon from ${url}`, description: 'Extracted project specification', registration_deadline: '2026-08-15', event_date: '2026-08-20', event_mode: 'online' };
+        throw err;
       }
     };
 
