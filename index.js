@@ -837,6 +837,42 @@ app.get('/api/analytics', async (req, res) => {
   }
 });
 
+// Admin Analytics API (Serving mock data for the React dashboard to be replaced with real data later)
+app.get('/api/admin/analytics', async (req, res) => {
+  res.json({
+    growth: [
+      { month: "Feb", students: 620 },
+      { month: "Mar", students: 890 },
+      { month: "Apr", students: 1180 },
+      { month: "May", students: 1610 },
+      { month: "Jun", students: 2140 },
+      { month: "Jul", students: 2760 },
+      { month: "Aug", students: 3412 },
+    ],
+    funnel: [
+      { stage: "Scraped", value: 1840 },
+      { stage: "Views", value: 1260 },
+      { stage: "Registrations", value: 742 },
+      { stage: "Proofs Approved", value: 421 },
+    ],
+    students: [
+      { name: "Ananya Rao", email: "ananya.rao@univ.edu", enrolled: 6, proofs: 5, status: "Active", joined: "2026-07-12" },
+      { name: "Marcus Cole", email: "m.cole@univ.edu", enrolled: 3, proofs: 1, status: "Flagged", joined: "2026-06-02" },
+      { name: "Sofia Marques", email: "sofia.m@univ.edu", enrolled: 9, proofs: 8, status: "Active", joined: "2026-05-21" },
+      { name: "Dev Patel", email: "dev.patel@univ.edu", enrolled: 4, proofs: 2, status: "Active", joined: "2026-08-01" },
+      { name: "Lina Haddad", email: "lina.h@univ.edu", enrolled: 1, proofs: 0, status: "Dormant", joined: "2026-03-18" },
+      { name: "Kenji Watanabe", email: "kenji.w@univ.edu", enrolled: 7, proofs: 6, status: "Active", joined: "2026-04-09" },
+      { name: "Priya Nair", email: "priya.n@univ.edu", enrolled: 2, proofs: 2, status: "Active", joined: "2026-07-29" },
+    ],
+    kpis: [
+      { label: "Total Students", value: "3,412", delta: "+18.4%" },
+      { label: "Active Enrollments", value: "742", delta: "+6.1%" },
+      { label: "Proof Verification Rate", value: "86.4%", delta: "+2.7%" },
+      { label: "AI Scraper Throughput", value: "1,840 / wk", delta: "+31.0%" },
+    ]
+  });
+});
+
 // ==========================================
 // 9. LEADERBOARD API
 // ==========================================
