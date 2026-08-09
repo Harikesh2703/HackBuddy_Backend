@@ -142,7 +142,34 @@ app.get('/test-db', async (req, res) => {
 });
 
 // ==========================================
-// Auth API
+// Custom Admin Login API
+// ==========================================
+app.post('/api/admin/login', (req, res) => {
+  const { email, password } = req.body;
+  
+  if (email !== 'harikeshs.cse2024@citchennai.com') {
+    return res.status(403).json({ error: 'Access denied. Unauthorized email.' });
+  }
+  
+  // Using a simple hardcoded password for the single admin account
+  if (password !== 'admin123') {
+    return res.status(401).json({ error: 'Invalid password.' });
+  }
+  
+  const token = jwt.sign(
+    { id: 1, email: 'harikeshs.cse2024@citchennai.com', role: 'admin' },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+  
+  res.json({
+    token,
+    user: { id: 1, email, name: 'Harikesh', role: 'admin', avatar_url: '' }
+  });
+});
+
+// ==========================================
+// 1. USER ENDPOINTS
 // ==========================================
 
 async function getExtendedUserProfile(user) {
