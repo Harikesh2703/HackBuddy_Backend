@@ -27,8 +27,6 @@ const JWT_SECRET = process.env.JWT_SECRET || 'hackbuddy_super_secret_key_2026';
 const app = express();
 
 const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
   'https://hackbuddy-admin-portal.netlify.app'
 ];
 
