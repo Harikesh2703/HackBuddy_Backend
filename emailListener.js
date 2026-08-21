@@ -114,15 +114,18 @@ Extract the following JSON strictly:
 
     console.log('✅ AI Decision:', result);
 
-    if (result.is_valid_hackathon_proof) {
-      // Find the user by email
-      const userRes = await db.query('SELECT id FROM users WHERE email = $1', [forwardedBy]);
-      if (userRes.rowCount === 0) {
-        console.log(`User ${forwardedBy} not found in database.`);
-        return;
-      }
-      const userId = userRes.rows[0].id;
+    // 1. Always try to identify the user first
+    let userId = null;
+    const userRes = await db.query('SELECT id FROM users WHERE email = $1', [forwardedBy]);
+    if (userRes.rowCount > 0) {
+      userId = userRes.rows[0].id;
+    } else {
+      console.log(`User ${forwardedBy} not found in database.`);
+    }
 
+    let matchedHackathonId = null;
+
+    if (result.is_valid_hackathon_proof && userId) {
       // Find pending teams for this user
       const teamsRes = await db.query(`
         SELECT tm.team_id, h.title as hackathon_title, h.id as hackathon_id
@@ -137,6 +140,7 @@ Extract the following JSON strictly:
         // Simple case-insensitive include match
         if (result.hackathon_title && row.hackathon_title.toLowerCase().includes(result.hackathon_title.toLowerCase())) {
            matchedTeamId = row.team_id;
+           matchedHackathonId = row.hackathon_id;
            break;
         }
       }
@@ -144,6 +148,7 @@ Extract the following JSON strictly:
       // If we couldn't match exactly by title but they only have one pending team, we can assume it's that one.
       if (!matchedTeamId && teamsRes.rowCount === 1) {
           matchedTeamId = teamsRes.rows[0].team_id;
+          matchedHackathonId = teamsRes.rows[0].hackathon_id;
       }
 
       if (matchedTeamId) {
@@ -169,9 +174,28 @@ Extract the following JSON strictly:
       } else {
          console.log(`Could not match hackathon title '${result.hackathon_title}' to any pending teams for user ${userId}.`);
       }
-    } else {
+    } else if (!result.is_valid_hackathon_proof) {
         console.log(`Proof rejected for ${forwardedBy}: ${result.rejection_reason}`);
     }
+
+    // 2. ALWAYS LOG TO SUBMISSIONS TABLE for the Admin Portal
+    // We use the email Subject as a pseudo "proof_url" or identifier for email forwards
+    const finalStatus = result.is_valid_hackathon_proof ? 'verified' : 'rejected';
+    const finalFeedback = result.is_valid_hackathon_proof ? 'Auto-approved via Email Forward' : (result.rejection_reason || 'Rejected by AI');
+    
+    await db.query(`
+      INSERT INTO submissions (hackathon_id, user_id, proof_url, ai_status, ai_feedback, ai_confidence) 
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [
+      matchedHackathonId, 
+      userId, 
+      `(Email Forward) ${subject}`, 
+      finalStatus, 
+      finalFeedback, 
+      0.95 // Arbitrary high confidence for email forwarding AI model
+    ]);
+    
+    console.log(`Logged ${finalStatus} submission to admin portal!`);
 
   } catch (error) {
     console.error('AI Extraction Failed:', error);
