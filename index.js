@@ -11,6 +11,7 @@ const bcrypt = require('bcryptjs');
 const admin = require('firebase-admin');
 const db = require('./db');
 const { scrapeHackathons } = require('./scraper');
+const { processUnreadEmails } = require('./emailListener');
 
 dotenv.config();
 
@@ -371,7 +372,7 @@ app.get('/api/warmup-model', isAdmin, async (req, res) => {
         'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify({
-        model: "Qwen/Qwen2.5-7B-Instruct",
+        model: "Qwen/Qwen2.5-72B-Instruct",
         messages: [{ role: "user", content: "ping" }],
         max_tokens: 1
       })
@@ -439,7 +440,7 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
               'Authorization': `Bearer ${token}`
             },
             body: JSON.stringify({
-              model: "Qwen/Qwen2.5-7B-Instruct",
+              model: "Qwen/Qwen2.5-72B-Instruct",
               messages: [
                 {
                   role: "user",
@@ -876,6 +877,45 @@ app.get('/api/analytics', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- ADMIN: Email Proof Verification ---
+app.post('/api/admin/verify-proofs', isAdmin, async (req, res) => {
+  try {
+    console.log('[ADMIN] Manual proof verification triggered.');
+    // Process asynchronously so the admin portal doesn't timeout waiting for the IMAP loop
+    processUnreadEmails().catch(err => console.error('Error in manual verification:', err));
+    res.json({ success: true, message: 'Email proof verification started in the background.' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to start verification.' });
+  }
+});
+
+let verificationInterval = null;
+
+app.post('/api/admin/schedule-verification', isAdmin, async (req, res) => {
+  try {
+    const { enable } = req.body;
+    
+    if (enable) {
+      if (!verificationInterval) {
+        // Schedule for every 8 hours
+        verificationInterval = setInterval(() => {
+          console.log('[ADMIN] Running scheduled 8-hour proof verification...');
+          processUnreadEmails().catch(err => console.error('Error in scheduled verification:', err));
+        }, 8 * 60 * 60 * 1000);
+      }
+      res.json({ success: true, message: '8-hour automated verification scheduled.', active: true });
+    } else {
+      if (verificationInterval) {
+        clearInterval(verificationInterval);
+        verificationInterval = null;
+      }
+      res.json({ success: true, message: '8-hour automated verification disabled.', active: false });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to update schedule.' });
   }
 });
 
