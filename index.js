@@ -11,6 +11,7 @@ const bcrypt = require('bcryptjs');
 const admin = require('firebase-admin');
 const db = require('./db');
 const { scrapeHackathons } = require('./scraper');
+const { convert } = require('html-to-text');
 const { processUnreadEmails } = require('./emailListener');
 
 dotenv.config();
@@ -413,21 +414,26 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
         console.error(`Error checking DB for ${url}:`, err);
       }
 
-      // Use Jina AI's free reader API to extract fully rendered Markdown text
-      // This completely bypasses the need for Puppeteer/Chrome!
+      // Use Jina AI to render the JavaScript remotely and return full HTML, 
+      // then convert to text locally. This avoids running Puppeteer on Render 
+      // but still gets every visible word (including footers/3D text).
       let pageText = '';
       try {
-        const jinaResponse = await fetch('https://r.jina.ai/' + url);
+        const jinaResponse = await fetch('https://r.jina.ai/' + url, {
+          headers: { 'X-Return-Format': 'html' }
+        });
         if (jinaResponse.ok) {
-          pageText = await jinaResponse.text();
+          const rawHtml = await jinaResponse.text();
+          pageText = convert(rawHtml, { wordwrap: false });
         } else {
           throw new Error('Jina returned ' + jinaResponse.status);
         }
       } catch (err) {
-        console.error('Jina fetch failed:', err);
+        console.error('Jina HTML fetch failed:', err);
       }
       
-      const truncatedText = pageText.substring(0, 15000);
+      // We increased the limit to 50,000 chars because Qwen2.5-72B can handle larger contexts.
+      const truncatedText = pageText.substring(0, 50000);
       try {
 
         // Attempt HF API call
