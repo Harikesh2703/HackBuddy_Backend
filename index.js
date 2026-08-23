@@ -419,22 +419,24 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
         console.error(`Error checking DB for ${url}:`, err);
       }
 
-      // Use Jina AI to render the JavaScript remotely and return full HTML, 
-      // then convert to text locally. This avoids running Puppeteer on Render 
-      // but still gets every visible word (including footers/3D text).
+      // Use Browserless.io to run Puppeteer remotely.
+      // This completely avoids crashing Render, but lets us use `document.body.innerText`
+      // to extract every single rendered word, exactly as visible to a human.
       let pageText = '';
       try {
-        const jinaResponse = await fetch('https://r.jina.ai/' + url, {
-          headers: { 'X-Return-Format': 'html' }
+        const BROWSERLESS_API_KEY = process.env.BROWSERLESS_API_KEY;
+        if (!BROWSERLESS_API_KEY) throw new Error("Missing BROWSERLESS_API_KEY in .env");
+        
+        const browser = await puppeteer.connect({
+          browserWSEndpoint: `wss://chrome.browserless.io?token=${BROWSERLESS_API_KEY}`
         });
-        if (jinaResponse.ok) {
-          const rawHtml = await jinaResponse.text();
-          pageText = convert(rawHtml, { wordwrap: false });
-        } else {
-          throw new Error('Jina returned ' + jinaResponse.status);
-        }
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+        pageText = await page.evaluate(() => document.body.innerText);
+        await browser.close();
       } catch (err) {
-        console.error('Jina HTML fetch failed:', err);
+        console.error('Browserless fetch failed:', err);
       }
       
       // We increased the limit to 50,000 chars because Qwen2.5-72B can handle larger contexts.
