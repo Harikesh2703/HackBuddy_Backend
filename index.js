@@ -396,7 +396,7 @@ app.get('/api/warmup-model', isAdmin, async (req, res) => {
 
 // Bulk extract hackathon details using Puppeteer & Hugging Face Qwen 2.5-VL
 app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
-  const { urls } = req.body;
+  const { urls, force } = req.body;
   if (!urls || !Array.isArray(urls) || urls.length === 0) {
     return res.status(400).json({ error: 'Array of URLs is required' });
   }
@@ -405,10 +405,15 @@ app.post('/api/hackathons/bulk-extract', isAdmin, async (req, res) => {
     const extractUrl = async (url) => {
       // 1. Check if URL already exists in database
       try {
-        const existing = await db.query('SELECT * FROM hackathons WHERE source_url = $1', [url]);
-        if (existing.rowCount > 0) {
-          console.log(`✅ Data for ${url} found in database. Skipping scraping.`);
-          return existing.rows[0];
+        if (!force) {
+          const existing = await db.query('SELECT * FROM hackathons WHERE source_url = $1', [url]);
+          if (existing.rowCount > 0) {
+            console.log(`✅ Data for ${url} found in database. Skipping scraping.`);
+            return existing.rows[0];
+          }
+        } else {
+          console.log(`🔄 Force re-extract requested for ${url}. Deleting old record...`);
+          await db.query('DELETE FROM hackathons WHERE source_url = $1', [url]);
         }
       } catch (err) {
         console.error(`Error checking DB for ${url}:`, err);
