@@ -783,6 +783,40 @@ app.patch('/api/submissions/:id/status', isAdmin, async (req, res) => {
       'UPDATE submissions SET ai_status = $1, ai_feedback = $2 WHERE id = $3 RETURNING *',
       [ai_status, ai_feedback || 'Status updated manually by Admin', id]
     );
+
+    // If admin approves it, also update the team member status so the mobile app reflects it
+    if (result.rowCount > 0 && ai_status === 'verified') {
+      const submission = result.rows[0];
+      const { user_id, hackathon_id } = submission;
+      
+      if (user_id && hackathon_id) {
+        const teamRes = await db.query(`
+          SELECT t.id as team_id 
+          FROM teams t
+          JOIN team_members tm ON t.id = tm.team_id
+          WHERE t.hackathon_id = $1 AND tm.user_id = $2
+        `, [hackathon_id, user_id]);
+        
+        if (teamRes.rowCount > 0) {
+          const teamId = teamRes.rows[0].team_id;
+          
+          await db.query(
+            'UPDATE team_members SET proof_url = $1 WHERE team_id = $2 AND user_id = $3',
+            ['verified_by_admin', teamId, user_id]
+          );
+          
+          const members = await db.query('SELECT proof_url, invite_status FROM team_members WHERE team_id = $1', [teamId]);
+          const allAcceptedHaveProof = members.rows
+            .filter(m => m.invite_status === 'accepted')
+            .every(m => m.proof_url !== null && m.proof_url !== '');
+            
+          if (allAcceptedHaveProof) {
+            await db.query("UPDATE teams SET status = 'registered' WHERE id = $1", [teamId]);
+          }
+        }
+      }
+    }
+
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
