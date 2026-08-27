@@ -38,7 +38,8 @@ async function processUnreadEmails() {
       const bodyText = parsed.text || '';
 
       // Skip internal system emails or non-forwarded emails
-      if (!subject.toLowerCase().startsWith('fwd:')) {
+      const subj = subject.toLowerCase();
+      if (!subj.startsWith('fwd:') && !subj.startsWith('fw:') && !subj.includes('forwarded')) {
         console.log(`⏭️ [SKIPPED] Non-forwarded email from: ${studentEmail} (Subject: ${subject})`);
         await client.messageFlagsAdd({ uid: msg.uid }, ['\\Seen'], { uid: true });
         continue;
