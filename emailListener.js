@@ -2,22 +2,22 @@ const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
 const db = require('./db');
 
-const client = new ImapFlow({
-  host: 'imap.gmail.com',
-  port: 993,
-  secure: true,
-  auth: {
-    user: 'hackbuddy.verify@gmail.com',
-    pass: process.env.EMAIL_APP_PASSWORD
-  },
-  logger: false
-});
-
 async function processUnreadEmails() {
   if (!process.env.EMAIL_APP_PASSWORD) {
      console.log('Skipping email check: EMAIL_APP_PASSWORD not set.');
      return;
   }
+  
+  const client = new ImapFlow({
+    host: 'imap.gmail.com',
+    port: 993,
+    secure: true,
+    auth: {
+      user: 'hackbuddy.verify@gmail.com',
+      pass: process.env.EMAIL_APP_PASSWORD
+    },
+    logger: false
+  });
   
   await client.connect();
   const lock = await client.getMailboxLock('INBOX');
